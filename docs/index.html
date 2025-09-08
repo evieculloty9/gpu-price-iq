@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root { --card: #0b1220; --muted:#93a1b1; --ring:#4f46e5; }
+    :root { --muted:#9fb3c8; }
     html,body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#070b13;color:#e6edf3;}
     .glass{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.08); box-shadow: 0 10px 30px rgba(0,0,0,.35); backdrop-filter: blur(8px);}
     .kpi{border:1px solid rgba(255,255,255,.08); background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));}
@@ -20,13 +20,12 @@
     .badge{padding:.2rem .5rem; border-radius:.5rem; font-size:.75rem; white-space:nowrap; border:1px solid; display:inline-block}
     .badge-on{ border-color: rgba(16,185,129,.35); color: rgba(167,243,208,.95); }
     .badge-res{ border-color: rgba(245,158,11,.35); color: rgba(254,215,170,.95); }
-    .muted{ color: #9fb3c8; }
+    .muted{ color: var(--muted); }
   </style>
 
-  <!-- PapaParse for CSV, dayjs for dates, Chart.js for optional sparkline -->
+  <!-- PapaParse for CSV, dayjs for dates -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body class="min-h-screen">
   <!-- Header -->
@@ -37,7 +36,7 @@
         <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-sky-400 to-emerald-400"></div>
         <div>
           <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Price-IQ</h1>
-          <p class="text-sm text-slate-300/80">Auto-generated from <span class="font-mono">docs/data/derived/</span>.</p>
+          <p class="text-sm text-slate-300/80">Auto-generated from <span class="font-mono">data/derived/</span>.</p>
         </div>
         <div class="ml-auto text-sm text-slate-300/70">Last updated: <span id="lastUpdated" class="font-medium text-white">–</span></div>
       </div>
@@ -219,53 +218,29 @@
       </div>
     </section>
 
-    <!-- Optional tiny sparkline for cheapest (only if you add a history CSV) -->
-    <section id="sparkWrap" class="kpi rounded-2xl p-5 mt-8 hidden">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-slate-300/80 text-sm">Cheapest provider price trend (last 30)</div>
-          <div id="sparkLabel" class="text-lg font-semibold mt-1"></div>
-        </div>
-        <canvas id="sparkChart" width="480" height="140" class="max-w-full"></canvas>
-      </div>
-    </section>
-
   </main>
 
   <footer class="max-w-7xl mx-auto px-5 sm:px-8 pb-10 pt-6 text-sm text-slate-400/80">
-    Built for internal benchmarking. Replace CSV paths in <span class="font-mono">PATHS</span> if your filenames differ.
+    Built for internal benchmarking.
   </footer>
 
   <script>
-  // ------------------ CONFIG ------------------
+  // ------------------ CONFIG (paths are relative to /docs/) ------------------
   const PATHS = {
-    scores: 'docs/data/derived/provider_scores_latest.csv',
-    roi:    'docs/data/derived/roi_comparison.csv',
-    predictions: 'docs/data/derived/price_predictions.csv',
-    // history: 'docs/data/derived/cheapest_history.csv' // optional sparkline
+    scores: 'data/derived/provider_scores_latest.csv',
+    roi:    'data/derived/roi_comparison.csv',
+    predictions: 'data/derived/price_predictions.csv'
   };
 
-  // ------------------ STATE ------------------
-  const state = {
-    raw: [],
-    filtered: [],
-    asc: true,
-    uniques: { gpu: [], region: [], duration: [], count: [] },
-    lastTs: null,
-  };
-
-  // ------------------ UTIL ------------------
+  // ------------------ STATE & UTILS ------------------
+  const state = { raw: [], filtered: [], asc: true, uniques: { gpu: [], region: [], duration: [], count: [] }, lastTs: null };
   const $ = sel => document.querySelector(sel);
   const $$ = sel => Array.from(document.querySelectorAll(sel));
   const fmtUSD = v => (v===null||v===undefined||v==='') ? '–' : `$${Number(v).toFixed(2)}`;
   const toNum = v => (v===null||v===undefined||v===''||v==='None') ? null : Number(String(v).replace(/[^\d.\-]/g,''));
   const clean = s => (s ?? '').toString().trim();
-  const shortTs = s => {
-    if(!s) return '–';
-    try { return dayjs(s).format('YYYY-MM-DD HH:mm'); } catch(e) { return s; }
-  };
+  const shortTs = s => { if(!s) return '–'; try { return dayjs(s).format('YYYY-MM-DD HH:mm'); } catch { return s; } };
 
-  // CSV loader
   function readCSV(path){
     return new Promise((resolve,reject)=>{
       Papa.parse(path, { download:true, header:true, dynamicTyping:false, skipEmptyLines:true,
@@ -274,7 +249,6 @@
     });
   }
 
-  // infer "type"
   function inferType(row){
     const on = toNum(row.price_hourly_usd);
     const rs = toNum(row.price_reserved_usd);
@@ -284,7 +258,7 @@
     return '';
   }
 
-  // ------------------ LOAD & NORMALIZE ------------------
+  // ------------------ LOAD + NORMALIZE ------------------
   function buildUniques(){
     const uniq = (arr, key) => Array.from(new Set(arr.map(x=>clean(x[key]))));
     state.uniques.gpu      = uniq(state.raw, 'gpu_model');
@@ -310,24 +284,17 @@
   }
 
   function applyFilters(){
-    const g = $('#fGpu').value;
-    const r = $('#fRegion').value;
-    const t = $('#fType').value;
-    const d = $('#fDuration').value;
-    const c = $('#fCount').value;
+    const g = $('#fGpu').value, r = $('#fRegion').value, t = $('#fType').value, d = $('#fDuration').value, c = $('#fCount').value;
 
     state.filtered = state.raw.filter(x=>{
       const type = inferType(x);
-      const pass =
-        (!g || clean(x.gpu_model)===g) &&
-        (!r || clean(x.region)===r) &&
-        (!t || type===t) &&
-        (!d || clean(x.reserved_duration)===d) &&
-        (!c || clean(x.gpu_count)===c);
-      return pass;
+      return (!g || clean(x.gpu_model)===g) &&
+             (!r || clean(x.region)===r) &&
+             (!t || type===t) &&
+             (!d || clean(x.reserved_duration)===d) &&
+             (!c || clean(x.gpu_count)===c);
     });
 
-    // sort by effective price (fallback to on-demand or reserved)
     state.filtered.sort((a,b)=>{
       const effA = toNum(a.effective_price_usd_per_gpu_hr) ?? toNum(a.price_hourly_usd) ?? toNum(a.price_reserved_usd) ?? Infinity;
       const effB = toNum(b.effective_price_usd_per_gpu_hr) ?? toNum(b.price_hourly_usd) ?? toNum(b.price_reserved_usd) ?? Infinity;
@@ -342,9 +309,9 @@
     const prices = state.filtered
       .map(x => toNum(x.effective_price_usd_per_gpu_hr) ?? toNum(x.price_hourly_usd) ?? toNum(x.price_reserved_usd))
       .filter(v => v!==null && !Number.isNaN(v));
-
     const cheapest = prices.length ? Math.min(...prices) : null;
     const median = prices.length ? prices.slice().sort((a,b)=>a-b)[Math.floor(prices.length/2)] : null;
+
     $('#kpiCheapest').textContent = fmtUSD(cheapest);
     $('#kpiMedian').textContent = fmtUSD(median);
     $('#kpiRows').textContent = state.filtered.length.toLocaleString();
@@ -352,20 +319,13 @@
 
     if(cheapest!==null){
       const row = state.filtered.find(x => (toNum(x.effective_price_usd_per_gpu_hr) ?? toNum(x.price_hourly_usd) ?? toNum(x.price_reserved_usd)) === cheapest);
-      if(row){
-        $('#kpiCheapestMeta').textContent = `${clean(row.provider)} · ${clean(row.region)} · ${clean(row.gpu_model)} (${inferType(row)})`;
-      } else {
-        $('#kpiCheapestMeta').textContent = '';
-      }
-    } else {
-      $('#kpiCheapestMeta').textContent = '';
-    }
+      $('#kpiCheapestMeta').textContent = row ? `${clean(row.provider)} · ${clean(row.region)} · ${clean(row.gpu_model)} (${inferType(row)})` : '';
+    } else $('#kpiCheapestMeta').textContent = '';
     $('#kpiMedianMeta').textContent = prices.length ? `${prices.length} quotes` : '';
   }
 
   function renderLeaderboard(){
-    const body = $('#lbBody');
-    body.innerHTML = '';
+    const body = $('#lbBody'); body.innerHTML = '';
     for(const row of state.filtered){
       const eff = toNum(row.effective_price_usd_per_gpu_hr);
       const priceShow = eff ?? toNum(row.price_hourly_usd) ?? toNum(row.price_reserved_usd);
@@ -390,20 +350,20 @@
   async function loadScores(){
     try{
       const data = await readCSV(PATHS.scores);
-      const normalized = data.map(x=>{
-        const o = {...x};
-        // flexible keys
-        o.provider            = o.provider ?? o.Provider ?? o.name ?? '';
-        o.region              = o.region ?? o.Region ?? 'Global';
-        o.gpu_model           = (o.gpu_model ?? o.gpu ?? o.model ?? '').toString().toUpperCase();
-        o.gpu_count           = o.gpu_count ?? o.count ?? '';
-        o.price_hourly_usd    = o.price_hourly_usd ?? o.usd_per_gpu_hr ?? o.price ?? '';
-        o.price_reserved_usd  = o.price_reserved_usd ?? o.reserved_price_hourly_usd ?? '';
-        o.effective_price_usd_per_gpu_hr = o.effective_price_usd_per_gpu_hr ?? o.effective_price ?? '';
-        o.reserved_duration   = o.reserved_duration ?? o.duration ?? '';
-        o.timestamp           = o.timestamp ?? o.fetched_at_utc ?? o.ts_utc ?? o.ts_iso ?? '';
-        o.priceiq_score       = o.priceiq_score ?? o.score ?? '';
-        return o;
+      if(!data.length) throw new Error('scores CSV empty');
+      const normalized = data.map(o=>{
+        const r = {...o};
+        r.provider  = r.provider ?? r.Provider ?? r.name ?? '';
+        r.region    = r.region ?? r.Region ?? 'Global';
+        r.gpu_model = (r.gpu_model ?? r.gpu ?? r.model ?? '').toString().toUpperCase();
+        r.gpu_count = r.gpu_count ?? r.count ?? '';
+        r.price_hourly_usd    = r.price_hourly_usd ?? r.usd_per_gpu_hr ?? r.price ?? '';
+        r.price_reserved_usd  = r.price_reserved_usd ?? r.reserved_price_hourly_usd ?? '';
+        r.effective_price_usd_per_gpu_hr = r.effective_price_usd_per_gpu_hr ?? r.effective_price ?? '';
+        r.reserved_duration   = r.reserved_duration ?? r.duration ?? '';
+        r.timestamp           = r.timestamp ?? r.fetched_at_utc ?? r.ts_utc ?? r.ts_iso ?? '';
+        r.priceiq_score       = r.priceiq_score ?? r.score ?? '';
+        return r;
       });
 
       state.raw = normalized.filter(r =>
@@ -412,9 +372,9 @@
         (toNum(r.price_reserved_usd) !== null)
       );
 
-      // last updated (latest timestamp present)
       state.lastTs = (state.raw.map(r=>r.timestamp).filter(Boolean).sort().pop()) || null;
       if(state.lastTs){ $('#lastUpdated').textContent = shortTs(state.lastTs); }
+      else { $('#lastUpdated').textContent = 'no timestamp'; }
 
       buildUniques();
       populateFilters();
@@ -449,7 +409,7 @@
 
   // ------------------ ROI CALCULATOR ------------------
   const DUR_HOURS = {"1 hour":1, "1 day":24, "1 week":24*7, "1 month":24*30};
-  let preds = []; // predictions rows
+  let preds = [];
 
   function hoursFromLabel(s){ return DUR_HOURS[s] ?? 1; }
   function keyFor(r){ return [clean(r.provider), clean(r.region), clean(r.gpu_model), clean(r.type||'On-Demand'), clean(r.duration||'1h')].join("|"); }
@@ -538,32 +498,7 @@
     $('#rcNote').textContent = rows.length ? `${rows.length} quotes evaluated` : 'No matching quotes';
   }
 
-  // ------------------ OPTIONAL SPARKLINE ------------------
-  async function maybeSpark(){
-    if(!PATHS.history) return;
-    try{
-      const h = await readCSV(PATHS.history);
-      if(!h || !h.length) return;
-      const xs = h.map(r=>r.ts || r.timestamp || r.ts_iso).slice(-30);
-      const ys = h.map(r=>toNum(r.price) ?? toNum(r.usd_per_gpu_hr)).slice(-30);
-      if(!ys.filter(v=>v!==null).length) return;
-
-      $('#sparkWrap').classList.remove('hidden');
-      $('#sparkLabel').textContent = 'Cheapest price / GPU-hr';
-      const ctx = document.getElementById('sparkChart');
-      new Chart(ctx, {
-        type: 'line',
-        data: { labels: xs, datasets: [{ data: ys, borderWidth: 2, tension: .35, pointRadius: 0 }]},
-        options: {
-          responsive:true, maintainAspectRatio:false,
-          plugins:{ legend:{display:false}, tooltip:{mode:'index', intersect:false} },
-          scales:{ x:{ display:false }, y:{ display:false } }
-        }
-      });
-    }catch{ /* ignore */ }
-  }
-
-  // ------------------ EVENTS ------------------
+  // ------------------ Events & Boot ------------------
   $('#clearBtn').addEventListener('click', ()=>{
     $$('#fGpu,#fRegion,#fType,#fDuration,#fCount').forEach(s=>s.value='');
     applyFilters();
@@ -577,18 +512,17 @@
   $('#rcCalc')?.addEventListener('click', runRoiCalc);
   $('#rcUsePred')?.addEventListener('change', runRoiCalc);
 
-  // ------------------ BOOT ------------------
   (async function init(){
     await loadScores();
     await loadRoiTable();
     await loadPredictions();
     initRoiCalcControls();
     runRoiCalc();
-    await maybeSpark();
   })();
   </script>
 </body>
 </html>
+
 
 
 
