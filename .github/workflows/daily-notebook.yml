@@ -91,14 +91,25 @@ jobs:
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase
+      
+          # 1) Stage changes FIRST (prevents 'cannot pull with rebase' error)
           git add docs/data/derived docs/data/history docs/data/latest docs/.nojekyll || true
+      
+          # 2) If nothing staged, bail out early
           if git diff --cached --quiet; then
             echo "No changes to commit."
-          else
-            git commit -m "Price-IQ: update data (derived + history + latest)"
-            git push
+            exit 0
           fi
+      
+          # 3) Commit
+          git commit -m "Price-IQ: update data (derived + history + latest)"
+      
+          # 4) Update local branch in case remote moved; reapply our commit cleanly
+          git pull --rebase --autostash
+      
+          # 5) Push
+          git push
+
 
 
 
