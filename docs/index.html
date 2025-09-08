@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Price-IQ Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simpledotcss/simple.min.css">
+  <style>
+    table {font-size: 14px}
+    th, td {white-space: nowrap}
+    .muted {opacity: .75}
+    .pill {display:inline-block;padding:.1rem .5rem;border-radius:999px;background:#eee;margin-left:.4rem}
+  </style>
+</head>
+<body>
+<header>
+  <h1>📊 Price-IQ</h1>
+  <p class="muted">Auto-generated from <code>docs/data/derived/</code> on each GitHub Action run.</p>
+  <div id="kpis" class="muted"></div>
+</header>
+
+<section>
+  <h3>Filters</h3>
+  <label>GPU model <select id="gpu"></select></label>
+  <label>Region <select id="region"></select></label>
+  <label>Type <select id="dtype"></select></label>
+</section>
+
+<section>
+  <h2>Leaderboard (Price-IQ)</h2>
+  <table id="iq"></table>
+</section>
+
+<section>
+  <h2>ROI (Cheapest total cost)</h2>
+  <table id="roi"></table>
+</section>
+
+<footer class="muted">
+  Source files: <code>price_iq_latest.json</code>, <code>roi_comparison_latest.json</code>, <code>backtest_report.json</code>
+</footer>
+
+<script>
+const IQ_URL  = "./data/derived/price_iq_latest.json";
+const ROI_URL = "./data/derived/roi_comparison_latest.json";
+const BT_URL  = "./data/derived/backtest_report.json";
+
+const state = { iq: [], roi: [], gpu: "H100", region: "(all)", dtype: "On-Demand" };
+
+function uniq(a){ return [...new Set(a)].sort(); }
+function el(tag, attrs={}, kids=[]) {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k,v]) => (k in e) ? e[k]=v : e.setAttribute(k,v));
+  kids.forEach(k => e.appendChild(typeof k==="string" ? document.createTextNode(k) : k));
+  return e;
+}
+function drawTable(id, cols, rows){
+  const tbl = document.getElementById(id);
+  const thead = el("thead",{}, [ el("tr",{}, cols.map(c => el("th",{},[c.label]))) ]);
+  const tbody = el("tbody",{}, rows.map(r => el("tr",{}, cols.map(c => el("td",{},[
+    (c.format ? c.format(r[c.key], r) : (r[c.key] ?? "")).toString()
+  ])))));
+  tbl.replaceChildren(thead, tbody);
+}
+function renderFilters(){
+  const gsel = document.getElementById("gpu");
+  const rsel = document.getElementById("region");
+  const tsel = document.getElementById("dtype");
+  const models  = uniq(state.iq.map(r=>r.gpu_model));
+  const regions = ["(all)", ...uniq(state.iq.map(r=>r.region))];
+  const types   = uniq(state.iq.map(r=>r.type || "On-Demand"));
+  gsel.innerHTML = models.map(m=>`<option ${m===state.gpu?"selected":""}>${m}</option>`).join("");
+  rsel.innerHTML = regions.map(r=>`<option ${r===state.region?"selected":""}>${r}</option>`).join("");
+  tsel.innerHTML = types.map(t=>`<option ${t===state.dtype?"selected":""}>${t}</option>`).join("");
+  gsel.onchange=()=>{state.gpu=gsel.value; draw();};
+  rsel.onchange=()=>{state.region=rsel.value; draw();};
+  tsel.onchange=()=>{state.dtype=tsel.value; draw();};
+}
+function drawKpis(report){
+  const k = document.getElementById("kpis");
+  if (!report || !report.length){ k.textContent=""; return; }
+  const parts = report.map(r =>
+    `${r.gpu_model}: top-1 ${Math.round(r.top1_acc*100)}% <span class="pill">regret $${r.avg_regret_per_gpu_hr.toFixed(3)}/GPU·hr</span> <span class="pill">days ${r.days}</span>`
+  );
+  k.innerHTML = parts.join(" &nbsp;•&nbsp; ");
+}
+function draw(){
+  let iq = state.iq.filter(r => r.gpu_model===state.gpu);
+  if (state.region !== "(all)") iq = iq.filter(r => r.region===state.region);
+  iq = iq.filter(r => (r.type||"On-Demand")===state.dtype)
+         .sort((a,b)=> b.price_iq - a.price_iq);
+  drawTable("iq", [
+    {key:"gpu_model",label:"GPU"},
+    {key:"provider",label:"Provider"},
+    {key:"region",label:"Region"},
+    {key:"type",label:"Type"},
+    {key:"price_hourly_usd",label:"$/GPU·hr",format:v=>Number(v).toFixed(2)},
+    {key:"market_median",label:"Market med",format:v=>Number(v).toFixed(2)},
+    {key:"price_iq",label:"Price-IQ"},
+    {key:"source_url",label:"Source",format:(v)=> v? "🔗" : "" }
+  ], iq);
+
+  let roi = state.roi.filter(r => r.gpu_model===state.gpu);
+  if (state.region !== "(all)") roi = roi.filter(r => r.region===state.region);
+  roi = roi.filter(r => (r.type||"On-Demand")===state.dtype)
+           .sort((a,b)=> a.total_cost - b.total_cost);
+  drawTable("roi", [
+    {key:"gpu_model",label:"GPU"},
+    {key:"provider",label:"Provider"},
+    {key:"region",label:"Region"},
+    {key:"type",label:"Type"},
+    {key:"price_hourly_usd",label:"$/GPU·hr",format:v=>Number(v).toFixed(2)},
+    {key:"total_cost",label:"Total $",format:v=>Number(v).toLocaleString()},
+    {key:"savings_vs_median",label:"Savings vs med",format:v=>Number(v).toLocaleString()},
+    {key:"source_url",label:"Source",format:(v)=> v? "🔗" : "" }
+  ], roi);
+}
+async function boot(){
+  const [iq, roi] = await Promise.all([
+    fetch(IQ_URL).then(r=>r.json()),
+    fetch(ROI_URL).then(r=>r.json()).catch(()=>[])
+  ]);
+  state.iq = iq; state.roi = roi;
+  state.gpu = (uniq(iq.map(r=>r.gpu_model))[0]) || "H100";
+  renderFilters(); draw();
+  try{
+    const rep = await fetch(BT_URL).then(r=>r.json());
+    drawKpis(rep);
+  }catch{ drawKpis([]); }
+}
+boot();
+</script>
+</body>
+</html>
