@@ -1,12 +1,23 @@
 name: Daily Price IQ notebook
 
 on:
-  workflow_dispatch: {}          # allow manual runs
+  # Manual trigger (you can override the path if you ever rename/move the notebook)
+  workflow_dispatch:
+    inputs:
+      nb_path:
+        description: "Notebook path to execute"
+        required: false
+        default: "scrape+formula.ipynb"
+  # Daily schedule (UTC)
   schedule:
-    - cron: "12 3 * * *"         # runs daily at 03:12 UTC (change if you want)
+    - cron: "12 3 * * *"
 
 permissions:
-  contents: write                # needed to commit updated CSV/JSON
+  contents: write
+
+concurrency:
+  group: priceiq-notebook
+  cancel-in-progress: true
 
 jobs:
   run-notebook:
@@ -25,22 +36,58 @@ jobs:
           cache: "pip"
 
       - name: Install Python deps
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
-          # If you already have requirements.txt in the repo, keep this next line.
-          pip install -r requirements.txt || true
-          # Make sure the notebook runner + your libs are present:
-          pip install papermill pandas requests beautifulsoup4 lxml nest_asyncio pytz playwright
+          # Optional: install your repo deps if present
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # Notebook runner + common libs used in your scrapers
+          pip install papermill jupyter nbconvert nbformat ipykernel \
+                      pandas requests beautifulsoup4 lxml nest_asyncio pytz playwright
 
       - name: Install Playwright (Chromium)
         run: |
           python -m playwright install --with-deps chromium
           python -m playwright install-deps
 
-      - name: Execute the notebook
+      - name: Resolve notebook path
+        shell: bash
         run: |
-          # 🔁 CHANGE THIS PATH to your notebook's actual path/name
-          papermill priceiq_pipeline.ipynb priceiq_pipeline-executed.ipynb
+          # Default to your notebook name at repo root
+          NB_PATH="${{ github.event.inputs.nb_path }}"
+          if [ -z "$NB_PATH" ]; then
+            NB_PATH="scrape+formula.ipynb"
+          fi
+
+          # If that file doesn't exist, try to auto-detect the first .ipynb in the repo
+          if [ ! -f "$NB_PATH" ]; then
+            CANDIDATE="$(git ls-files '*.ipynb' | head -n1)"
+            if [ -n "$CANDIDATE" ]; then
+              NB_PATH="$CANDIDATE"
+            fi
+          fi
+
+          if [ ! -f "$NB_PATH" ]; then
+            echo "❌ Notebook not found. Expected 'scrape+formula.ipynb' at repo root or provide inputs.nb_path."
+            exit 1
+          fi
+
+          echo "✅ Using notebook: $NB_PATH"
+          echo "NB_PATH=$NB_PATH" >> "$GITHUB_ENV"
+
+      - name: Prepare data directories
+        run: |
+          mkdir -p docs/data/latest docs/data/history docs/data/snapshots docs/data/derived
+          mkdir -p artifacts
+
+      - name: Execute the notebook with Papermill
+        run: |
+          echo "Running: $NB_PATH"
+          OUT="artifacts/$(basename "$NB_PATH" .ipynb)-executed.ipynb"
+          # The quotes ensure the '+' in the filename is handled correctly
+          papermill "$NB_PATH" "$OUT" -k python3
+          echo "✅ Executed notebook saved to: $OUT"
 
       - name: Commit data artifacts
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -54,3 +101,5 @@ jobs:
             docs/data/snapshots/*.csv
             docs/data/derived/*.csv
             docs/data/derived/*.json
+            artifacts/*.ipynb
+
