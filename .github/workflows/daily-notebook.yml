@@ -44,20 +44,28 @@ jobs:
             pip install papermill pandas numpy pyarrow
           fi
 
-      - name: Prepare output dirs
+      - name: Install deps
         run: |
-          mkdir -p "$OUTPUT_DIR"
-          # keep Pages happy even if /docs is root
-          mkdir -p docs && echo > docs/.nojekyll
+          python -m pip install --upgrade pip
+          # If you have requirements.txt, install it first
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # Ensure these are present even if not in requirements.txt
+          pip install --upgrade papermill nbformat nbclient jupyter ipykernel pyarrow pandas numpy
 
       - name: Execute notebook
+        env:
+          NB_IN: scrape+formula.ipynb   # change if your file is different
+          OUTPUT_DIR: docs/data/derived
         run: |
-          mkdir -p artifacts
-          # if NB_IN isn't present, fall back to first .ipynb in repo
+          mkdir -p artifacts "$OUTPUT_DIR"
           NB="${NB_IN}"
           [ -f "$NB" ] || NB="$(git ls-files '*.ipynb' | head -n 1)"
           echo "Using notebook: $NB"
-          papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" -p OUTPUT_DIR "$OUTPUT_DIR"
+          python -m papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" \
+            -p OUTPUT_DIR "$OUTPUT_DIR"
+
 
       - name: Commit dashboard data
         env:
