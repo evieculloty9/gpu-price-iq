@@ -1,0 +1,56 @@
+name: Daily Price IQ notebook
+
+on:
+  workflow_dispatch: {}          # allow manual runs
+  schedule:
+    - cron: "12 3 * * *"         # runs daily at 03:12 UTC (change if you want)
+
+permissions:
+  contents: write                # needed to commit updated CSV/JSON
+
+jobs:
+  run-notebook:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          # If you already have requirements.txt in the repo, keep this next line.
+          pip install -r requirements.txt || true
+          # Make sure the notebook runner + your libs are present:
+          pip install papermill pandas requests beautifulsoup4 lxml nest_asyncio pytz playwright
+
+      - name: Install Playwright (Chromium)
+        run: |
+          python -m playwright install --with-deps chromium
+          python -m playwright install-deps
+
+      - name: Execute the notebook
+        run: |
+          # 🔁 CHANGE THIS PATH to your notebook's actual path/name
+          papermill priceiq_pipeline.ipynb priceiq_pipeline-executed.ipynb
+
+      - name: Commit data artifacts
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(data): daily notebook run"
+          commit_user_name: price-bot
+          commit_user_email: bot@users.noreply.github.com
+          file_pattern: |
+            docs/data/latest/*.csv
+            docs/data/history/*.csv
+            docs/data/snapshots/*.csv
+            docs/data/derived/*.csv
+            docs/data/derived/*.json
