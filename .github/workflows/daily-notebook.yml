@@ -2,7 +2,7 @@ name: Price-IQ — build & publish
 
 on:
   schedule:
-    - cron: "0 */4 * * *"
+    - cron: "0 */4 * * *"     # every 4 hours
   workflow_dispatch: {}
 
 permissions:
@@ -34,20 +34,20 @@ jobs:
           python-version: "3.10"
           cache: "pip"
 
-      # (optional) cache browsers to speed up runs
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-msplaywright-v1
 
-      - name: Install deps (papermill + Playwright)
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
+          else
+            pip install papermill pandas numpy pyarrow beautifulsoup4 lxml requests playwright scikit-learn
           fi
-          pip install --upgrade papermill nbformat nbclient jupyter ipykernel pandas pyarrow numpy playwright
 
       - name: Install Playwright Chromium (with OS deps)
         run: |
@@ -55,13 +55,14 @@ jobs:
 
       - name: Prepare output dirs
         run: |
-          mkdir -p "$OUTPUT_DIR" docs
+          mkdir -p docs/data/derived docs/data/history docs/data/latest docs
           echo > docs/.nojekyll
+
       - name: Execute notebook
         env:
           NB_IN: ${{ env.NB_IN }}
           OUTPUT_DIR: ${{ env.OUTPUT_DIR }}
-          HEADLESS: "1"                 # <-- add this
+          HEADLESS: "1"   # skip any interactive EDA in CI
         run: |
           mkdir -p artifacts "$OUTPUT_DIR"
           NB="${NB_IN}"
@@ -69,21 +70,20 @@ jobs:
           echo "Using notebook: $NB"
           python -m papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" \
             -p OUTPUT_DIR "$OUTPUT_DIR" \
-            -p HEADLESS "$HEADLESS"     # <-- and pass it to the notebook
+            -p HEADLESS "$HEADLESS"
 
-
-      - name: Commit dashboard data
+      - name: Commit dashboard data (derived + history + latest)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase
-          git add docs/data/derived docs/.nojekyll || true
+          git add docs/data/derived docs/data/history docs/data/latest docs/.nojekyll || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Price-IQ: update derived CSVs"
+            git commit -m "Price-IQ: update data (derived + history + latest)"
             git push
           fi
 
