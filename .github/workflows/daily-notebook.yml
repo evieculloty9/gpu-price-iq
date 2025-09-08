@@ -2,7 +2,7 @@ name: Price-IQ — build & publish
 
 on:
   schedule:
-    - cron: "0 */4 * * *"   # every 4 hours (change if you like)
+    - cron: "0 */4 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -16,9 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHONUNBUFFERED: "1"
   OUTPUT_DIR: docs/data/derived
-  NB_IN: priceiq.ipynb     # change if your notebook has a different path/name
+  NB_IN: scrape+formula.ipynb
+  PYTHONUNBUFFERED: "1"
 
 jobs:
   run:
@@ -26,8 +26,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -35,29 +34,34 @@ jobs:
           python-version: "3.10"
           cache: "pip"
 
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            pip install papermill pandas numpy pyarrow
-          fi
+      # (optional) cache browsers to speed up runs
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-msplaywright-v1
 
-      - name: Install deps
+      - name: Install deps (papermill + Playwright)
         run: |
           python -m pip install --upgrade pip
-          # If you have requirements.txt, install it first
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          # Ensure these are present even if not in requirements.txt
-          pip install --upgrade papermill nbformat nbclient jupyter ipykernel pyarrow pandas numpy
+          pip install --upgrade papermill nbformat nbclient jupyter ipykernel pandas pyarrow numpy playwright
+
+      - name: Install Playwright Chromium (with OS deps)
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Prepare output dirs
+        run: |
+          mkdir -p "$OUTPUT_DIR" docs
+          echo > docs/.nojekyll
 
       - name: Execute notebook
         env:
-          NB_IN: scrape+formula.ipynb   # change if your file is different
-          OUTPUT_DIR: docs/data/derived
+          NB_IN: ${{ env.NB_IN }}
+          OUTPUT_DIR: ${{ env.OUTPUT_DIR }}
         run: |
           mkdir -p artifacts "$OUTPUT_DIR"
           NB="${NB_IN}"
@@ -66,22 +70,21 @@ jobs:
           python -m papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" \
             -p OUTPUT_DIR "$OUTPUT_DIR"
 
-
       - name: Commit dashboard data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin "${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
-          git add docs/data/derived || true
-          git add docs/.nojekyll || true
+          git pull --rebase
+          git add docs/data/derived docs/.nojekyll || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
             git commit -m "Price-IQ: update derived CSVs"
             git push
           fi
+
 
 
 
