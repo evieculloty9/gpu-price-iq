@@ -2,7 +2,7 @@ name: Price-IQ — build & publish
 
 on:
   schedule:
-    - cron: "0 */4 * * *"     # every 4 hours
+    - cron: "0 */4 * * *"           # run every 4 hours
   workflow_dispatch: {}
 
 permissions:
@@ -23,10 +23,13 @@ env:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -40,25 +43,40 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-msplaywright-v1
 
+      # --- Always ensure ipykernel + papermill/jupyter exist, even if requirements.txt is present
       - name: Install deps & register kernel
         run: |
+          set -e
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
-          else
-            pip install papermill nbformat nbclient jupyter ipykernel pandas numpy pyarrow beautifulsoup4 lxml requests playwright scikit-learn
           fi
-          # register a standard kernel name the runner will have
+          # Ensure CI has a working kernelspec and notebook tooling
+          pip install --upgrade ipykernel jupyter papermill nbformat nbclient
+          # (if your requirements.txt doesn't include these libs, uncomment next line)
+          # pip install pandas numpy pyarrow beautifulsoup4 lxml requests scikit-learn playwright
           python -m ipykernel install --user --name python3 --display-name "Python 3"
-      
+          python -m jupyter kernelspec list
+
+      - name: Install Playwright Chromium (with OS deps)
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Prepare output dirs
+        run: |
+          mkdir -p docs/data/derived docs/data/history docs/data/latest docs
+          echo > docs/.nojekyll
+
       - name: Execute notebook
         env:
           NB_IN: ${{ env.NB_IN }}
           OUTPUT_DIR: ${{ env.OUTPUT_DIR }}
-          HEADLESS: "1"
+          HEADLESS: "1"   # make notebook CI-safe (skip interactive EDA)
         run: |
+          set -e
           mkdir -p artifacts "$OUTPUT_DIR"
           NB="${NB_IN}"
+          # fallback to first notebook if name changes
           [ -f "$NB" ] || NB="$(git ls-files '*.ipynb' | head -n 1)"
           echo "Using notebook: $NB"
           python -m papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" \
@@ -66,11 +84,11 @@ jobs:
             -p OUTPUT_DIR "$OUTPUT_DIR" \
             -p HEADLESS "$HEADLESS"
 
-
       - name: Commit dashboard data (derived + history + latest)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase
@@ -81,6 +99,7 @@ jobs:
             git commit -m "Price-IQ: update data (derived + history + latest)"
             git push
           fi
+
 
 
 
