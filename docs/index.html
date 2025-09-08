@@ -1,135 +1,434 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Price-IQ Dashboard</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simpledotcss/simple.min.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Price-IQ</title>
+
+  <!-- Inter + Tailwind (CDN) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    table {font-size: 14px}
-    th, td {white-space: nowrap}
-    .muted {opacity: .75}
-    .pill {display:inline-block;padding:.1rem .5rem;border-radius:999px;background:#eee;margin-left:.4rem}
+    :root { --card: #0b1220; --muted:#93a1b1; --ring:#4f46e5; }
+    html,body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#070b13;color:#e6edf3;}
+    .glass{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.08); box-shadow: 0 10px 30px rgba(0,0,0,.35); backdrop-filter: blur(8px);}
+    .kpi{border:1px solid rgba(255,255,255,.08); background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));}
+    .chip{border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.06)}
+    table thead th{ color:#9fb3c8; font-weight:600; letter-spacing:.02em; }
+    table tbody tr:hover{ background:rgba(255,255,255,.04) }
+    .badge{padding:.2rem .5rem; border-radius:.5rem; font-size:.75rem; white-space:nowrap}
+    .badgesmall{padding:.15rem .4rem; border-radius:.45rem; font-size:.70rem; white-space:nowrap}
   </style>
+
+  <!-- PapaParse for CSV, dayjs for dates, Chart.js for optional sparkline -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
-<body>
-<header>
-  <h1>📊 Price-IQ</h1>
-  <p class="muted">Auto-generated from <code>docs/data/derived/</code> on each GitHub Action run.</p>
-  <div id="kpis" class="muted"></div>
-</header>
+<body class="min-h-screen">
 
-<section>
-  <h3>Filters</h3>
-  <label>GPU model <select id="gpu"></select></label>
-  <label>Region <select id="region"></select></label>
-  <label>Type <select id="dtype"></select></label>
-</section>
+  <!-- Header -->
+  <header class="relative">
+    <div class="absolute inset-0 bg-gradient-to-r from-indigo-600/30 via-fuchsia-600/20 to-emerald-500/20 blur-3xl -z-10"></div>
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-8">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-sky-400 to-emerald-400"></div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Price-IQ</h1>
+          <p class="text-sm text-slate-300/80">Auto-generated from <span class="font-mono">docs/data/derived/</span> on each GitHub Action run.</p>
+        </div>
+        <div class="ml-auto text-sm text-slate-300/70">Last updated: <span id="lastUpdated" class="font-medium text-white">–</span></div>
+      </div>
+    </div>
+  </header>
 
-<section>
-  <h2>Leaderboard (Price-IQ)</h2>
-  <table id="iq"></table>
-</section>
+  <main class="max-w-7xl mx-auto px-5 sm:px-8 pb-20">
 
-<section>
-  <h2>ROI (Cheapest total cost)</h2>
-  <table id="roi"></table>
-</section>
+    <!-- Filters -->
+    <section class="glass rounded-2xl p-5 sm:p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4">Filters</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div>
+          <label class="block text-sm text-slate-300/80 mb-1">GPU</label>
+          <select id="fGpu" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300/80 mb-1">Region</label>
+          <select id="fRegion" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300/80 mb-1">Type</label>
+          <select id="fType" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All</option>
+            <option>On-demand</option>
+            <option>Reserved</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300/80 mb-1">Duration</label>
+          <select id="fDuration" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300/80 mb-1">GPU Count</label>
+          <select id="fCount" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button id="clearBtn" class="w-full px-3 py-2 rounded-xl border border-slate-600 hover:bg-white/5 transition">Clear</button>
+        </div>
+      </div>
+    </section>
 
-<footer class="muted">
-  Source files: <code>price_iq_latest.json</code>, <code>roi_comparison_latest.json</code>, <code>backtest_report.json</code>
-</footer>
+    <!-- KPIs -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="kpi rounded-2xl p-5">
+        <div class="text-slate-300/80 text-sm">Cheapest / GPU-hr</div>
+        <div class="text-3xl font-bold mt-1" id="kpiCheapest">–</div>
+        <div class="text-sm mt-2" id="kpiCheapestMeta"></div>
+      </div>
+      <div class="kpi rounded-2xl p-5">
+        <div class="text-slate-300/80 text-sm">Median / GPU-hr</div>
+        <div class="text-3xl font-bold mt-1" id="kpiMedian">–</div>
+        <div class="text-sm mt-2" id="kpiMedianMeta"></div>
+      </div>
+      <div class="kpi rounded-2xl p-5">
+        <div class="text-slate-300/80 text-sm">Providers covered</div>
+        <div class="text-3xl font-bold mt-1" id="kpiProviders">–</div>
+        <div class="text-sm mt-2 text-slate-300/80">Unique provider names in current filter.</div>
+      </div>
+      <div class="kpi rounded-2xl p-5">
+        <div class="text-slate-300/80 text-sm">Entries</div>
+        <div class="text-3xl font-bold mt-1" id="kpiRows">–</div>
+        <div class="text-sm mt-2 text-slate-300/80">Rows displayed in leaderboard.</div>
+      </div>
+    </section>
 
-<script>
-const IQ_URL  = "./data/derived/price_iq_latest.json";
-const ROI_URL = "./data/derived/roi_comparison_latest.json";
-const BT_URL  = "./data/derived/backtest_report.json";
+    <!-- Leaderboard -->
+    <section class="glass rounded-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-white/10">
+        <h2 class="text-xl font-semibold">Leaderboard (Price-IQ)</h2>
+        <div class="text-sm text-slate-300/80">Sort: 
+          <button id="sortBtn" class="ml-2 px-2 py-1 rounded-lg chip hover:bg-white/10">Price ↑</button>
+        </div>
+      </div>
+      <div class="p-0 overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-white/5">
+            <tr>
+              <th class="text-left px-5 py-3">Provider</th>
+              <th class="text-left px-5 py-3">Region</th>
+              <th class="text-left px-5 py-3">GPU</th>
+              <th class="text-left px-5 py-3">Type</th>
+              <th class="text-left px-5 py-3">Duration</th>
+              <th class="text-left px-5 py-3">Count</th>
+              <th class="text-right px-5 py-3">$/GPU-hr</th>
+              <th class="text-right px-5 py-3">Score</th>
+              <th class="text-left px-5 py-3">When</th>
+            </tr>
+          </thead>
+          <tbody id="lbBody"></tbody>
+        </table>
+      </div>
+    </section>
 
-const state = { iq: [], roi: [], gpu: "H100", region: "(all)", dtype: "On-Demand" };
+    <!-- ROI -->
+    <section class="glass rounded-2xl overflow-hidden mt-8">
+      <div class="px-5 sm:px-6 py-4 border-b border-white/10 flex items-center gap-4">
+        <h2 class="text-xl font-semibold">ROI (Cheapest total cost)</h2>
+        <span class="badgesmall border border-emerald-400/30 text-emerald-300/90">from roi_comparison.csv</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-white/5" id="roiHead"></thead>
+          <tbody id="roiBody"></tbody>
+        </table>
+      </div>
+    </section>
 
-function uniq(a){ return [...new Set(a)].sort(); }
-function el(tag, attrs={}, kids=[]) {
-  const e = document.createElement(tag);
-  Object.entries(attrs).forEach(([k,v]) => (k in e) ? e[k]=v : e.setAttribute(k,v));
-  kids.forEach(k => e.appendChild(typeof k==="string" ? document.createTextNode(k) : k));
-  return e;
-}
-function drawTable(id, cols, rows){
-  const tbl = document.getElementById(id);
-  const thead = el("thead",{}, [ el("tr",{}, cols.map(c => el("th",{},[c.label]))) ]);
-  const tbody = el("tbody",{}, rows.map(r => el("tr",{}, cols.map(c => el("td",{},[
-    (c.format ? c.format(r[c.key], r) : (r[c.key] ?? "")).toString()
-  ])))));
-  tbl.replaceChildren(thead, tbody);
-}
-function renderFilters(){
-  const gsel = document.getElementById("gpu");
-  const rsel = document.getElementById("region");
-  const tsel = document.getElementById("dtype");
-  const models  = uniq(state.iq.map(r=>r.gpu_model));
-  const regions = ["(all)", ...uniq(state.iq.map(r=>r.region))];
-  const types   = uniq(state.iq.map(r=>r.type || "On-Demand"));
-  gsel.innerHTML = models.map(m=>`<option ${m===state.gpu?"selected":""}>${m}</option>`).join("");
-  rsel.innerHTML = regions.map(r=>`<option ${r===state.region?"selected":""}>${r}</option>`).join("");
-  tsel.innerHTML = types.map(t=>`<option ${t===state.dtype?"selected":""}>${t}</option>`).join("");
-  gsel.onchange=()=>{state.gpu=gsel.value; draw();};
-  rsel.onchange=()=>{state.region=rsel.value; draw();};
-  tsel.onchange=()=>{state.dtype=tsel.value; draw();};
-}
-function drawKpis(report){
-  const k = document.getElementById("kpis");
-  if (!report || !report.length){ k.textContent=""; return; }
-  const parts = report.map(r =>
-    `${r.gpu_model}: top-1 ${Math.round(r.top1_acc*100)}% <span class="pill">regret $${r.avg_regret_per_gpu_hr.toFixed(3)}/GPU·hr</span> <span class="pill">days ${r.days}</span>`
-  );
-  k.innerHTML = parts.join(" &nbsp;•&nbsp; ");
-}
-function draw(){
-  let iq = state.iq.filter(r => r.gpu_model===state.gpu);
-  if (state.region !== "(all)") iq = iq.filter(r => r.region===state.region);
-  iq = iq.filter(r => (r.type||"On-Demand")===state.dtype)
-         .sort((a,b)=> b.price_iq - a.price_iq);
-  drawTable("iq", [
-    {key:"gpu_model",label:"GPU"},
-    {key:"provider",label:"Provider"},
-    {key:"region",label:"Region"},
-    {key:"type",label:"Type"},
-    {key:"price_hourly_usd",label:"$/GPU·hr",format:v=>Number(v).toFixed(2)},
-    {key:"market_median",label:"Market med",format:v=>Number(v).toFixed(2)},
-    {key:"price_iq",label:"Price-IQ"},
-    {key:"source_url",label:"Source",format:(v)=> v? "🔗" : "" }
-  ], iq);
+    <!-- Optional tiny sparkline for the cheapest provider (renders only if history CSV present) -->
+    <section id="sparkWrap" class="kpi rounded-2xl p-5 mt-8 hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-slate-300/80 text-sm">Cheapest provider price trend (last 30)</div>
+          <div id="sparkLabel" class="text-lg font-semibold mt-1"></div>
+        </div>
+        <canvas id="sparkChart" width="480" height="140" class="max-w-full"></canvas>
+      </div>
+    </section>
 
-  let roi = state.roi.filter(r => r.gpu_model===state.gpu);
-  if (state.region !== "(all)") roi = roi.filter(r => r.region===state.region);
-  roi = roi.filter(r => (r.type||"On-Demand")===state.dtype)
-           .sort((a,b)=> a.total_cost - b.total_cost);
-  drawTable("roi", [
-    {key:"gpu_model",label:"GPU"},
-    {key:"provider",label:"Provider"},
-    {key:"region",label:"Region"},
-    {key:"type",label:"Type"},
-    {key:"price_hourly_usd",label:"$/GPU·hr",format:v=>Number(v).toFixed(2)},
-    {key:"total_cost",label:"Total $",format:v=>Number(v).toLocaleString()},
-    {key:"savings_vs_median",label:"Savings vs med",format:v=>Number(v).toLocaleString()},
-    {key:"source_url",label:"Source",format:(v)=> v? "🔗" : "" }
-  ], roi);
-}
-async function boot(){
-  const [iq, roi] = await Promise.all([
-    fetch(IQ_URL).then(r=>r.json()),
-    fetch(ROI_URL).then(r=>r.json()).catch(()=>[])
-  ]);
-  state.iq = iq; state.roi = roi;
-  state.gpu = (uniq(iq.map(r=>r.gpu_model))[0]) || "H100";
-  renderFilters(); draw();
-  try{
-    const rep = await fetch(BT_URL).then(r=>r.json());
-    drawKpis(rep);
-  }catch{ drawKpis([]); }
-}
-boot();
-</script>
+  </main>
+
+  <script>
+  // ------------------ CONFIG ------------------
+  const PATHS = {
+    // Adjust these if your filenames differ
+    scores: 'docs/data/derived/provider_scores_latest.csv',
+    roi:    'docs/data/derived/roi_comparison.csv',
+    // Optional: if you also write a dedicated history file per provider, e.g. cheapest_history.csv
+    // history: 'docs/data/derived/cheapest_history.csv'
+  };
+
+  // ------------------ STATE ------------------
+  const state = {
+    raw: [],
+    filtered: [],
+    asc: true,                 // price sort
+    uniques: { gpu: [], region: [], duration: [], count: [] },
+    lastTs: null,
+  };
+
+  // ------------------ UTIL ------------------
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const fmtUSD = v => (v===null||v===undefined||v==='') ? '–' : `$${Number(v).toFixed(2)}`;
+  const toNum = v => (v===null||v===undefined||v===''||v==='None') ? null : Number(String(v).replace(/[^\d.]/g,''));
+  const clean = s => (s ?? '').toString().trim();
+  const badge = (txt, color='indigo') => `<span class="badge border border-${color}-400/30 text-${color}-200/90">${txt}</span>`;
+  const shortTs = s => {
+    if(!s) return '–';
+    try { return dayjs(s).format('YYYY-MM-DD HH:mm'); } catch(e) { return s; }
+  };
+
+  // infer "type" from which price col is populated
+  function inferType(row){
+    const on = toNum(row.price_hourly_usd);
+    const rs = toNum(row.price_reserved_usd);
+    if(on !== null && (rs===null)) return 'On-demand';
+    if(rs !== null && (on===null)) return 'Reserved';
+    if(on !== null && rs !== null) return 'On-demand'; // prefer on-demand for ranking if both exist
+    return '';
+  }
+
+  function readCSV(path){
+    return new Promise((resolve,reject)=>{
+      Papa.parse(path, { download:true, header:true, dynamicTyping:false, skipEmptyLines:true,
+        complete: res => resolve(res.data), error: err => reject(err)
+      });
+    });
+  }
+
+  function populateFilters(){
+    const addOpts = (el, vals) => {
+      vals.filter(v=>v).sort((a,b)=>String(a).localeCompare(String(b))).forEach(v=>{
+        const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o);
+      });
+    };
+    $('#fGpu').innerHTML = '<option value="">All</option>';
+    $('#fRegion').innerHTML = '<option value="">All</option>';
+    $('#fDuration').innerHTML = '<option value="">All</option>';
+    $('#fCount').innerHTML = '<option value="">All</option>';
+
+    addOpts($('#fGpu'), state.uniques.gpu);
+    addOpts($('#fRegion'), state.uniques.region);
+    addOpts($('#fDuration'), state.uniques.duration);
+    addOpts($('#fCount'), state.uniques.count);
+  }
+
+  function applyFilters(){
+    const g = $('#fGpu').value;
+    const r = $('#fRegion').value;
+    const t = $('#fType').value;
+    const d = $('#fDuration').value;
+    const c = $('#fCount').value;
+
+    state.filtered = state.raw.filter(x=>{
+      const type = inferType(x);
+      const pass =
+        (!g || clean(x.gpu_model)===g) &&
+        (!r || clean(x.region)===r) &&
+        (!t || type===t) &&
+        (!d || clean(x.reserved_duration)===d) &&
+        (!c || clean(x.gpu_count)===c);
+      return pass;
+    });
+
+    // sort by price (on-demand if present else reserved)
+    state.filtered.sort((a,b)=>{
+      const pa = toNum(a.price_hourly_usd) ?? toNum(a.price_reserved_usd) ?? Infinity;
+      const pb = toNum(b.price_hourly_usd) ?? toNum(b.price_reserved_usd) ?? Infinity;
+      return state.asc ? (pa - pb) : (pb - pa);
+    });
+
+    renderLeaderboard();
+    renderKpis();
+  }
+
+  function renderKpis(){
+    const prices = state.filtered
+      .map(x => toNum(x.price_hourly_usd) ?? toNum(x.price_reserved_usd))
+      .filter(v => v!==null);
+
+    const cheapest = prices.length ? Math.min(...prices) : null;
+    const median = prices.length ? prices.sort((a,b)=>a-b)[Math.floor(prices.length/2)] : null;
+    $('#kpiCheapest').textContent = fmtUSD(cheapest);
+    $('#kpiMedian').textContent = fmtUSD(median);
+    $('#kpiRows').textContent = state.filtered.length.toLocaleString();
+    $('#kpiProviders').textContent = new Set(state.filtered.map(x=>clean(x.provider))).size || '–';
+
+    if(cheapest!==null){
+      // find first row that matches cheapest price for meta text
+      const row = state.filtered.find(x => (toNum(x.price_hourly_usd) ?? toNum(x.price_reserved_usd)) === cheapest);
+      if(row){
+        $('#kpiCheapestMeta').innerHTML = `${clean(row.provider)} · ${clean(row.region)} · ${clean(row.gpu_model)} (${inferType(row)})`;
+      } else {
+        $('#kpiCheapestMeta').textContent = '';
+      }
+    } else {
+      $('#kpiCheapestMeta').textContent = '';
+    }
+    $('#kpiMedianMeta').textContent = prices.length ? `${prices.length} quotes` : '';
+  }
+
+  function renderLeaderboard(){
+    const body = $('#lbBody');
+    body.innerHTML = '';
+    for(const row of state.filtered){
+      const price = toNum(row.price_hourly_usd);
+      const priceShow = price!==null ? price : toNum(row.price_reserved_usd);
+      const type = inferType(row);
+      const score = row.priceiq_score ?? row.score ?? ''; // flexible if you add a score column
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="px-5 py-3 font-medium">${clean(row.provider)}</td>
+        <td class="px-5 py-3">${clean(row.region) || '–'}</td>
+        <td class="px-5 py-3">${clean(row.gpu_model)}</td>
+        <td class="px-5 py-3">${type ? badge(type, type==='Reserved' ? 'amber' : 'emerald') : '–'}</td>
+        <td class="px-5 py-3">${clean(row.reserved_duration)||'–'}</td>
+        <td class="px-5 py-3">${clean(row.gpu_count)||'–'}</td>
+        <td class="px-5 py-3 text-right">${fmtUSD(priceShow)}</td>
+        <td class="px-5 py-3 text-right">${score ? Number(score).toFixed(2) : '–'}</td>
+        <td class="px-5 py-3">${shortTs(row.timestamp || row.ts_utc || row.ts_iso)}</td>
+      `;
+      body.appendChild(tr);
+    }
+  }
+
+  function buildUniques(){
+    const uniq = (arr, key) => Array.from(new Set(arr.map(x=>clean(x[key]))));
+    state.uniques.gpu      = uniq(state.raw, 'gpu_model');
+    state.uniques.region   = uniq(state.raw, 'region');
+    state.uniques.duration = uniq(state.raw, 'reserved_duration');
+    state.uniques.count    = uniq(state.raw, 'gpu_count');
+  }
+
+  async function loadScores(){
+    try{
+      const data = await readCSV(PATHS.scores);
+      // normalize keys to expected names where possible
+      const normalized = data.map(x=>{
+        const o = {...x};
+        // common alternate name fallbacks
+        o.provider            = o.provider ?? o.Provider ?? o.name ?? '';
+        o.region              = o.region ?? o.Region ?? '';
+        o.gpu_model           = o.gpu_model ?? o.gpu ?? o.model ?? '';
+        o.gpu_count           = o.gpu_count ?? o.count ?? '';
+        o.price_hourly_usd    = o.price_hourly_usd ?? o.usd_per_gpu_hr ?? o.price ?? '';
+        o.price_reserved_usd  = o.price_reserved_usd ?? o.reserved_price_hourly_usd ?? '';
+        o.reserved_duration   = o.reserved_duration ?? o.duration ?? '';
+        o.timestamp           = o.timestamp ?? o.ts_utc ?? o.ts_iso ?? '';
+        o.priceiq_score       = o.priceiq_score ?? o.score ?? '';
+        return o;
+      });
+
+      state.raw = normalized.filter(r => (toNum(r.price_hourly_usd) !== null) || (toNum(r.price_reserved_usd)!==null));
+      state.lastTs = (state.raw.map(r=>r.timestamp).filter(Boolean).sort().pop()) || null;
+
+      if(state.lastTs){ $('#lastUpdated').textContent = shortTs(state.lastTs); }
+      buildUniques();
+      populateFilters();
+      applyFilters();
+    }catch(err){
+      console.error('Failed to load scores CSV', err);
+      $('#lastUpdated').textContent = 'failed to load CSV';
+    }
+  }
+
+  async function loadRoi(){
+    try{
+      const rows = await readCSV(PATHS.roi);
+      if(!rows || !rows.length){ return; }
+      const head = Object.keys(rows[0]);
+
+      // header
+      const thead = $('#roiHead');
+      thead.innerHTML = `<tr>${head.map(h=>`<th class="text-left px-5 py-3">${h}</th>`).join('')}</tr>`;
+
+      // body
+      const tbody = $('#roiBody');
+      tbody.innerHTML = rows.map(r=>{
+        return `<tr>${head.map(h=>{
+          let v = r[h];
+          if(/price|cost|usd|per_hour/i.test(h)) v = fmtUSD(toNum(v));
+          return `<td class="px-5 py-3">${v ?? '–'}</td>`;
+        }).join('')}</tr>`;
+      }).join('');
+    }catch(err){
+      console.warn('ROI CSV not found/loaded. Skipping.', err);
+    }
+  }
+
+  async function maybeSpark(){
+    if(!PATHS.history) return; // optional
+    try{
+      const h = await readCSV(PATHS.history);
+      if(!h || !h.length) return;
+      const xs = h.map(r=>r.ts || r.timestamp || r.ts_iso).slice(-30);
+      const ys = h.map(r=>toNum(r.price) ?? toNum(r.usd_per_gpu_hr)).slice(-30);
+      if(!ys.filter(v=>v!==null).length) return;
+
+      $('#sparkWrap').classList.remove('hidden');
+      $('#sparkLabel').textContent = 'Cheapest price / GPU-hr';
+
+      const ctx = document.getElementById('sparkChart');
+      new Chart(ctx, {
+        type: 'line',
+        data: { labels: xs, datasets: [{ data: ys, borderWidth: 2, tension: .35, pointRadius: 0 }]},
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{display:false}, tooltip:{mode:'index', intersect:false} },
+          scales:{ x:{ display:false }, y:{ display:false } }
+        }
+      });
+    }catch{ /* ignore */ }
+  }
+
+  // ------------------ EVENTS ------------------
+  $('#clearBtn').addEventListener('click', ()=>{
+    $$('#fGpu,#fRegion,#fType,#fDuration,#fCount').forEach(s=>s.value='');
+    applyFilters();
+  });
+
+  $$('#fGpu,#fRegion,#fType,#fDuration,#fCount').forEach(s=>{
+    s.addEventListener('change', applyFilters);
+  });
+
+  $('#sortBtn').addEventListener('click', ()=>{
+    state.asc = !state.asc;
+    $('#sortBtn').textContent = state.asc ? 'Price ↑' : 'Price ↓';
+    applyFilters();
+  });
+
+  // ------------------ BOOT ------------------
+  (async function init(){
+    await loadScores();
+    await loadRoi();
+    await maybeSpark();
+  })();
+  </script>
+
+  <footer class="max-w-7xl mx-auto px-5 sm:px-8 pb-10 pt-6 text-sm text-slate-400/80">
+    Built for internal benchmarking. Replace CSV paths in <span class="font-mono">PATHS</span> if your filenames differ.
+  </footer>
 </body>
 </html>
+
 
