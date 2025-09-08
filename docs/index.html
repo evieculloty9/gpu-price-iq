@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Price-IQ Dashboard</title>
 
-  <!-- Inter + Tailwind (CDN) -->
+  <!-- Inter + Tailwind -->
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -20,10 +20,9 @@
     .badge{padding:.2rem .5rem; border-radius:.5rem; font-size:.75rem; white-space:nowrap; border:1px solid; display:inline-block}
     .badge-on{ border-color: rgba(16,185,129,.35); color: rgba(167,243,208,.95); }
     .badge-res{ border-color: rgba(245,158,11,.35); color: rgba(254,215,170,.95); }
-    .muted{ color: var(--muted); }
   </style>
 
-  <!-- PapaParse for CSV, dayjs for dates -->
+  <!-- PapaParse + dayjs -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
 </head>
@@ -38,7 +37,7 @@
           <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Price-IQ</h1>
           <p class="text-sm text-slate-300/80">Auto-generated from <span class="font-mono">data/derived/</span>.</p>
         </div>
-        <div class="ml-auto text-sm text-slate-300/70">Last updated: <span id="lastUpdated" class="font-medium text-white">–</span></div>
+        <div class="ml-auto text-sm text-slate-300/70">Last updated: <span id="lastUpdated" class="font-medium text-white">loading…</span></div>
       </div>
     </div>
   </header>
@@ -51,38 +50,28 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <div>
           <label class="block text-sm text-slate-300/80 mb-1">GPU</label>
-          <select id="fGpu" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All</option>
-          </select>
+          <select id="fGpu" class="w-full chip rounded-xl px-3 py-2"><option value="">All</option></select>
         </div>
         <div>
           <label class="block text-sm text-slate-300/80 mb-1">Region</label>
-          <select id="fRegion" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All</option>
-          </select>
+          <select id="fRegion" class="w-full chip rounded-xl px-3 py-2"><option value="">All</option></select>
         </div>
         <div>
           <label class="block text-sm text-slate-300/80 mb-1">Type</label>
-          <select id="fType" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All</option>
-            <option>On-Demand</option>
-            <option>Reserved</option>
+          <select id="fType" class="w-full chip rounded-xl px-3 py-2">
+            <option value="">All</option><option>On-Demand</option><option>Reserved</option>
           </select>
         </div>
         <div>
           <label class="block text-sm text-slate-300/80 mb-1">Duration</label>
-          <select id="fDuration" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All</option>
-          </select>
+          <select id="fDuration" class="w-full chip rounded-xl px-3 py-2"><option value="">All</option></select>
         </div>
         <div>
           <label class="block text-sm text-slate-300/80 mb-1">GPU Count</label>
-          <select id="fCount" class="w-full chip rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All</option>
-          </select>
+          <select id="fCount" class="w-full chip rounded-xl px-3 py-2"><option value="">All</option></select>
         </div>
         <div class="flex items-end">
-          <button id="clearBtn" class="w-full px-3 py-2 rounded-xl border border-slate-600 hover:bg-white/5 transition">Clear</button>
+          <button id="clearBtn" class="w-full px-3 py-2 rounded-xl border border-slate-600 hover:bg-white/5">Clear</button>
         </div>
       </div>
     </section>
@@ -139,7 +128,7 @@
       </div>
     </section>
 
-    <!-- ROI (precomputed table from CSV) -->
+    <!-- ROI (precomputed table) -->
     <section class="glass rounded-2xl overflow-hidden mt-8">
       <div class="px-5 sm:px-6 py-4 border-b border-white/10 flex items-center gap-4">
         <h2 class="text-xl font-semibold">ROI (Cheapest total cost)</h2>
@@ -153,7 +142,7 @@
       </div>
     </section>
 
-    <!-- ROI Calculator (interactive) -->
+    <!-- ROI Calculator -->
     <section class="glass rounded-2xl p-5 sm:p-6 mt-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-semibold">ROI Calculator</h2>
@@ -225,12 +214,51 @@
   </footer>
 
   <script>
-  // ------------------ CONFIG (paths are relative to /docs/) ------------------
+  // ------------------ CONFIG (relative to /docs) ------------------
   const PATHS = {
     scores: 'data/derived/provider_scores_latest.csv',
     roi:    'data/derived/roi_comparison.csv',
     predictions: 'data/derived/price_predictions.csv'
   };
+
+  // ------------------ Robust CSV loader (cache-bust + fallback) --------------
+  function showLoadError(label, url, err) {
+    const el = document.getElementById('lastUpdated');
+    if (el) el.textContent = `${label}: failed ${url}`;
+    console.error(`[${label}] load failed:`, url, err);
+  }
+
+  async function fetchCsvOnce(url) {
+    const bust = `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
+    return new Promise((resolve, reject) => {
+      Papa.parse(bust, {
+        download: true, header: true, dynamicTyping: false, skipEmptyLines: true,
+        complete: res => resolve(res.data || []),
+        error: err => reject(err)
+      });
+    });
+  }
+
+  async function readCSV(primaryPath, label='csv') {
+    const base = new URL('.', location.href).href; // current /docs/ base
+    const primaryUrl  = new URL(primaryPath, base).href;
+    const fallbackUrl = new URL(`docs/${primaryPath}`, base).href; // handles rare /docs/docs/ cases
+    try {
+      const rows = await fetchCsvOnce(primaryUrl);
+      if (!rows.length) throw new Error('empty CSV');
+      return rows;
+    } catch (e1) {
+      try {
+        const rows2 = await fetchCsvOnce(fallbackUrl);
+        if (!rows2.length) throw new Error('empty CSV (fallback)');
+        return rows2;
+      } catch (e2) {
+        showLoadError(label, primaryUrl, e1);
+        showLoadError(label + ' (fallback)', fallbackUrl, e2);
+        return [];
+      }
+    }
+  }
 
   // ------------------ STATE & UTILS ------------------
   const state = { raw: [], filtered: [], asc: true, uniques: { gpu: [], region: [], duration: [], count: [] }, lastTs: null };
@@ -240,14 +268,6 @@
   const toNum = v => (v===null||v===undefined||v===''||v==='None') ? null : Number(String(v).replace(/[^\d.\-]/g,''));
   const clean = s => (s ?? '').toString().trim();
   const shortTs = s => { if(!s) return '–'; try { return dayjs(s).format('YYYY-MM-DD HH:mm'); } catch { return s; } };
-
-  function readCSV(path){
-    return new Promise((resolve,reject)=>{
-      Papa.parse(path, { download:true, header:true, dynamicTyping:false, skipEmptyLines:true,
-        complete: res => resolve(res.data || []), error: err => reject(err)
-      });
-    });
-  }
 
   function inferType(row){
     const on = toNum(row.price_hourly_usd);
@@ -334,14 +354,14 @@
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="px-5 py-3 font-medium">${clean(row.provider)}</td>
-        <td class="px-5 py-3">${clean(row.region) || '–'}</td>
+        <td class="px-5 py-3">${clean(row.region) || 'Global'}</td>
         <td class="px-5 py-3">${clean(row.gpu_model)}</td>
         <td class="px-5 py-3">${type ? `<span class="badge ${type==='Reserved' ? 'badge-res':'badge-on'}">${type}</span>` : '–'}</td>
         <td class="px-5 py-3">${clean(row.reserved_duration)||'–'}</td>
         <td class="px-5 py-3">${clean(row.gpu_count)||'–'}</td>
         <td class="px-5 py-3 text-right">${fmtUSD(priceShow)}</td>
         <td class="px-5 py-3 text-right">${score ? Number(score).toFixed(2) : '–'}</td>
-        <td class="px-5 py-3">${shortTs(row.timestamp || row.ts_utc || row.ts_iso)}</td>
+        <td class="px-5 py-3">${(row.timestamp||row.fetched_at_utc)? dayjs(row.timestamp||row.fetched_at_utc).format('YYYY-MM-DD HH:mm') : '–'}</td>
       `;
       body.appendChild(tr);
     }
@@ -349,8 +369,9 @@
 
   async function loadScores(){
     try{
-      const data = await readCSV(PATHS.scores);
+      const data = await readCSV(PATHS.scores, 'scores');
       if(!data.length) throw new Error('scores CSV empty');
+
       const normalized = data.map(o=>{
         const r = {...o};
         r.provider  = r.provider ?? r.Provider ?? r.name ?? '';
@@ -373,27 +394,23 @@
       );
 
       state.lastTs = (state.raw.map(r=>r.timestamp).filter(Boolean).sort().pop()) || null;
-      if(state.lastTs){ $('#lastUpdated').textContent = shortTs(state.lastTs); }
-      else { $('#lastUpdated').textContent = 'no timestamp'; }
+      $('#lastUpdated').textContent = state.lastTs ? dayjs(state.lastTs).format('YYYY-MM-DD HH:mm') : 'no timestamp';
 
       buildUniques();
       populateFilters();
       applyFilters();
     }catch(err){
-      console.error('Failed to load scores CSV', err);
-      $('#lastUpdated').textContent = 'failed to load CSV';
+      showLoadError('scores', PATHS.scores, err);
     }
   }
 
   async function loadRoiTable(){
     try{
-      const rows = await readCSV(PATHS.roi);
+      const rows = await readCSV(PATHS.roi, 'roi');
       if(!rows || !rows.length){ return; }
       const head = Object.keys(rows[0]);
-
       const thead = $('#roiHead');
       thead.innerHTML = `<tr>${head.map(h=>`<th class="text-left px-5 py-3">${h}</th>`).join('')}</tr>`;
-
       const tbody = $('#roiBody');
       tbody.innerHTML = rows.map(r=>{
         return `<tr>${head.map(h=>{
@@ -416,7 +433,7 @@
 
   async function loadPredictions(){
     try{
-      const rows = await readCSV(PATHS.predictions);
+      const rows = await readCSV(PATHS.predictions, 'predictions');
       preds = rows.map(r=>{
         r.provider = r.provider ?? r.Provider ?? r.name ?? "";
         r.region = r.region ?? r.Region ?? "Global";
@@ -475,11 +492,7 @@
       const {price, source} = priceForRow(r, usePred);
       if(price===null || price===undefined || isNaN(price)) continue;
       const total = price * cnt * hrs * util;
-      rows.push({
-        provider: clean(r.provider),
-        region: clean(r.region)||'Global',
-        price, total, source
-      });
+      rows.push({ provider: clean(r.provider), region: clean(r.region)||'Global', price, total, source });
     }
 
     rows.sort((a,b)=>a.total-b.total);
@@ -522,6 +535,7 @@
   </script>
 </body>
 </html>
+
 
 
 
