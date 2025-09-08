@@ -57,18 +57,20 @@ jobs:
         run: |
           mkdir -p "$OUTPUT_DIR" docs
           echo > docs/.nojekyll
-
       - name: Execute notebook
         env:
           NB_IN: ${{ env.NB_IN }}
           OUTPUT_DIR: ${{ env.OUTPUT_DIR }}
+          HEADLESS: "1"                 # <-- add this
         run: |
           mkdir -p artifacts "$OUTPUT_DIR"
           NB="${NB_IN}"
           [ -f "$NB" ] || NB="$(git ls-files '*.ipynb' | head -n 1)"
           echo "Using notebook: $NB"
           python -m papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" \
-            -p OUTPUT_DIR "$OUTPUT_DIR"
+            -p OUTPUT_DIR "$OUTPUT_DIR" \
+            -p HEADLESS "$HEADLESS"     # <-- and pass it to the notebook
+
 
       - name: Commit dashboard data
         env:
