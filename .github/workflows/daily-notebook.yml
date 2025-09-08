@@ -40,37 +40,32 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-msplaywright-v1
 
-      - name: Install deps
+      - name: Install deps & register kernel
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            pip install papermill pandas numpy pyarrow beautifulsoup4 lxml requests playwright scikit-learn
+            pip install papermill nbformat nbclient jupyter ipykernel pandas numpy pyarrow beautifulsoup4 lxml requests playwright scikit-learn
           fi
-
-      - name: Install Playwright Chromium (with OS deps)
-        run: |
-          python -m playwright install --with-deps chromium
-
-      - name: Prepare output dirs
-        run: |
-          mkdir -p docs/data/derived docs/data/history docs/data/latest docs
-          echo > docs/.nojekyll
-
+          # register a standard kernel name the runner will have
+          python -m ipykernel install --user --name python3 --display-name "Python 3"
+      
       - name: Execute notebook
         env:
           NB_IN: ${{ env.NB_IN }}
           OUTPUT_DIR: ${{ env.OUTPUT_DIR }}
-          HEADLESS: "1"   # skip any interactive EDA in CI
+          HEADLESS: "1"
         run: |
           mkdir -p artifacts "$OUTPUT_DIR"
           NB="${NB_IN}"
           [ -f "$NB" ] || NB="$(git ls-files '*.ipynb' | head -n 1)"
           echo "Using notebook: $NB"
           python -m papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" \
+            -k python3 \
             -p OUTPUT_DIR "$OUTPUT_DIR" \
             -p HEADLESS "$HEADLESS"
+
 
       - name: Commit dashboard data (derived + history + latest)
         env:
