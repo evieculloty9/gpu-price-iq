@@ -1,7 +1,10 @@
+papermill
 pandas
-requests
+numpy
+pyarrow
 beautifulsoup4
-playwright
-nest_asyncio
-pytz
 lxml
+requests
+playwright
+scikit-learn
+
