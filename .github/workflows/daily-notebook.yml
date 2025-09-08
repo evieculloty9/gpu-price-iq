@@ -1,44 +1,79 @@
-name: priceiq-daily
+name: Price-IQ — build & publish
 
 on:
   schedule:
-    - cron: '0 6 * * *'      # daily 06:00 UTC
+    - cron: "0 */4 * * *"   # every 4 hours (change if you like)
   workflow_dispatch: {}
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
 
 concurrency:
-  group: priceiq-daily
+  group: priceiq-build
   cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  OUTPUT_DIR: docs/data/derived
+  NB_IN: priceiq.ipynb     # change if your notebook has a different path/name
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
 
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -m playwright install --with-deps chromium
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install papermill pandas numpy pyarrow
+          fi
+
+      - name: Prepare output dirs
+        run: |
+          mkdir -p "$OUTPUT_DIR"
+          # keep Pages happy even if /docs is root
+          mkdir -p docs && echo > docs/.nojekyll
 
       - name: Execute notebook
         run: |
-          pip install papermill
-          papermill "scrape+formula.ipynb" "docs/data/derived/run-output.ipynb"
+          mkdir -p artifacts
+          # if NB_IN isn't present, fall back to first .ipynb in repo
+          NB="${NB_IN}"
+          [ -f "$NB" ] || NB="$(git ls-files '*.ipynb' | head -n 1)"
+          echo "Using notebook: $NB"
+          papermill "$NB" "artifacts/$(basename "${NB%.ipynb}")_out.ipynb" -p OUTPUT_DIR "$OUTPUT_DIR"
 
-      - name: Commit data
+      - name: Commit dashboard data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.email "actions@github.com"
-          git config user.name "github-actions"
-          git add docs/data/** || true
-          git add docs/index.html || true
-          git commit -m "chore(data): daily notebook run" || echo "No changes"
-          git push
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+          git add docs/data/derived || true
+          git add docs/.nojekyll || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Price-IQ: update derived CSVs"
+            git push
+          fi
+
 
 
