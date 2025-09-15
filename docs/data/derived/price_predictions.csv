@@ -1,16 +1,16 @@
 provider,region,gpu_model,type,duration,gpu_count,date_target,yhat,p10,p50,p90,last_obs_date
-CrusoeCloud,Global,H100,On-Demand,1h,1.0,2025-09-15,3.9,3.622,3.9,4.7985,2025-09-14
-CrusoeCloud,Global,H100,Reserved-1y,1h,1.0,2025-09-15,2.93,2.7211,2.93,3.605,2025-09-14
-CrusoeCloud,Global,H100,Reserved-3y,1h,1.0,2025-09-15,2.54,2.3589,2.54,3.1251,2025-09-14
-CrusoeCloud,Global,H100,Reserved-6m,1h,1.0,2025-09-15,3.12,2.8976,3.12,3.8388,2025-09-14
-Hydra Host (Brokkr),Global,H100,On-Demand,1h,1.0,2025-09-15,2.3,2.1361,2.3,2.8299,2025-09-14
-Paperspace,Global,H100,On-Demand,1h,,2025-09-15,2.24,2.0803,2.24,2.756,2025-09-14
-TensorDock,Global,H100,On-Demand,1h,1.0,2025-09-15,2.25,2.0896,2.25,2.7683,2025-09-14
-Vast.ai,Global,H100,On-Demand,1h,,2025-09-15,1.25,1.1609,1.25,1.538,2025-09-14
-CoreWeave,US,H100,On-Demand,1h,,2025-09-15,20.0,12.0,20.0,28.1901,2025-09-14
-VoltagePark,US,H100,On-Demand,1h,,2025-09-15,1.99,1.194,1.99,2.8049,2025-09-14
-CrusoeCloud,Global,H200,On-Demand,1h,1.0,2025-09-15,4.29,3.7171,4.29,4.5698,2025-09-14
-CrusoeCloud,Global,H200,Reserved-1y,1h,1.0,2025-09-15,3.22,2.79,3.22,3.43,2025-09-14
-CrusoeCloud,Global,H200,Reserved-3y,1h,1.0,2025-09-15,2.79,2.4174,2.79,2.972,2025-09-14
-CrusoeCloud,Global,H200,Reserved-6m,1h,1.0,2025-09-15,3.43,2.972,3.43,3.6537,2025-09-14
-Hydra Host (Brokkr),Global,H200,On-Demand,1h,1.0,2025-09-15,2.5,2.1661,2.5,2.663,2025-09-14
+CrusoeCloud,Global,H100,On-Demand,1h,1.0,2025-09-16,3.9,3.622,3.9,4.7985,2025-09-15
+CrusoeCloud,Global,H100,Reserved-1y,1h,1.0,2025-09-16,2.93,2.7211,2.93,3.605,2025-09-15
+CrusoeCloud,Global,H100,Reserved-3y,1h,1.0,2025-09-16,2.54,2.3589,2.54,3.1251,2025-09-15
+CrusoeCloud,Global,H100,Reserved-6m,1h,1.0,2025-09-16,3.12,2.8976,3.12,3.8388,2025-09-15
+Hydra Host (Brokkr),Global,H100,On-Demand,1h,1.0,2025-09-16,2.3,2.1361,2.3,2.8299,2025-09-15
+Paperspace,Global,H100,On-Demand,1h,,2025-09-16,2.24,2.0803,2.24,2.756,2025-09-15
+TensorDock,Global,H100,On-Demand,1h,1.0,2025-09-16,2.25,2.0896,2.25,2.7683,2025-09-15
+Vast.ai,Global,H100,On-Demand,1h,,2025-09-16,1.25,1.1609,1.25,1.538,2025-09-15
+CoreWeave,US,H100,On-Demand,1h,,2025-09-16,20.0,12.0,20.0,28.1901,2025-09-15
+VoltagePark,US,H100,On-Demand,1h,,2025-09-16,1.99,1.194,1.99,2.8049,2025-09-15
+CrusoeCloud,Global,H200,On-Demand,1h,1.0,2025-09-16,4.29,3.7171,4.29,4.5698,2025-09-15
+CrusoeCloud,Global,H200,Reserved-1y,1h,1.0,2025-09-16,3.22,2.79,3.22,3.43,2025-09-15
+CrusoeCloud,Global,H200,Reserved-3y,1h,1.0,2025-09-16,2.79,2.4174,2.79,2.972,2025-09-15
+CrusoeCloud,Global,H200,Reserved-6m,1h,1.0,2025-09-16,3.43,2.972,3.43,3.6537,2025-09-15
+Hydra Host (Brokkr),Global,H200,On-Demand,1h,1.0,2025-09-16,2.5,2.1661,2.5,2.663,2025-09-15
