@@ -1,3 +1,3 @@
 provider,region,gpu_model,type,duration,gpu_count,price_hourly_usd,source_url,fetched_at_utc
-Nebius,Global,H200,On-Demand,1h,,2.3,https://nebius.com/prices,2025-09-18 12:19:29.948515
-Nebius,Global,H100,On-Demand,1h,,2.0,https://nebius.com/prices,2025-09-18 12:19:29.948515
+Nebius,Global,H200,On-Demand,1h,,2.3,https://nebius.com/prices,2025-09-18 16:13:35.112339
+Nebius,Global,H100,On-Demand,1h,,2.0,https://nebius.com/prices,2025-09-18 16:13:35.112339
