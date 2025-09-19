@@ -1,2 +1,2 @@
 provider,region,gpu_model,type,duration,gpu_count,price_hourly_usd,source_url,fetched_at_utc
-CoreWeave,US,H100,On-Demand,1h,,20.0,https://www.coreweave.com/pricing,2025-09-19 12:19:12
+CoreWeave,US,H100,On-Demand,1h,,20.0,https://www.coreweave.com/pricing,2025-09-19 16:12:39
